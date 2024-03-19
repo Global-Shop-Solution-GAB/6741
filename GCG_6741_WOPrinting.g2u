@@ -1,0 +1,672 @@
+﻿Program.Sub.ScreenSU.Start
+Gui.FormWO..Create(BaseForm)
+Gui.FormWO..Caption("ARC 6741 - WO & Associated Docs Printing")
+Gui.FormWO..Size(1197,699)
+Gui.FormWO..MinX(0)
+Gui.FormWO..MinY(0)
+Gui.FormWO..Position(0,0)
+Gui.FormWO..AlwaysOnTop(False)
+Gui.FormWO..FontName("Tahoma")
+Gui.FormWO..FontSize(8.25)
+Gui.FormWO..ControlBox(True)
+Gui.FormWO..MaxButton(True)
+Gui.FormWO..MinButton(True)
+Gui.FormWO..MousePointer(0)
+Gui.FormWO..Moveable(True)
+Gui.FormWO..Sizeable(True)
+Gui.FormWO..ShowInTaskBar(True)
+Gui.FormWO..TitleBar(True)
+Gui.FormWO..Event(UnLoad,FormWO_UnLoad)
+Gui.FormWO.gsgcWO.Create(GsGridControl)
+Gui.FormWO.gsgcWO.Enabled(True)
+Gui.FormWO.gsgcWO.Visible(True)
+Gui.FormWO.gsgcWO.Zorder(0)
+Gui.FormWO.gsgcWO.Size(1176,618)
+Gui.FormWO.gsgcWO.Position(10,40)
+Gui.FormWO.gsgcWO.Anchor(15)
+Gui.FormWO.cmd1.Create(Button)
+Gui.FormWO.cmd1.Enabled(True)
+Gui.FormWO.cmd1.Visible(True)
+Gui.FormWO.cmd1.Zorder(0)
+Gui.FormWO.cmd1.Size(85,23)
+Gui.FormWO.cmd1.Position(1068,9)
+Gui.FormWO.cmd1.Caption("Print WOs")
+Gui.FormWO.cmd1.FontName("Tahoma")
+Gui.FormWO.cmd1.FontSize(8.25)
+Gui.FormWO.cmd1.Event(Click,cmd1_Click)
+Gui.FormWO.cmd1.Anchor(9)
+Gui.FormWO.chkDocsOnly.Create(CheckBox)
+Gui.FormWO.chkDocsOnly.Enabled(True)
+Gui.FormWO.chkDocsOnly.Visible(True)
+Gui.FormWO.chkDocsOnly.Zorder(0)
+Gui.FormWO.chkDocsOnly.Size(134,20)
+Gui.FormWO.chkDocsOnly.Position(91,11)
+Gui.FormWO.chkDocsOnly.Caption("Print WO Docs Only")
+Gui.FormWO.chkDocsOnly.FontName("Tahoma")
+Gui.FormWO.chkDocsOnly.FontSize(8.25)
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+V.Global.sError.Declare(String)
+
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+'Author: Arturo Almaguer
+'Date: 5/10/22
+'Customer: HY-FLEX CORPORATION, quote number 13344
+'This program process an excel spreadsheet and prints barcoded WO with their linked documents too. The WO doesnt print some sequences based on WC exceptions.
+'This script is launched off a new custom menu item under Shop Floor Connect > Reports > Import Laser File to Print.
+
+Function.Intrinsic.UI.UsePixels ' Allows you to use Pixels instead of Twips throughout
+
+F.Intrinsic.Control.Try
+
+	'Calling subs
+	F.Intrinsic.Control.CallSub("OpenFileDialog")
+	F.Intrinsic.Control.CallSub("LoadGrid")
+	F.Intrinsic.Control.CallSub("SetContextMenus")
+	
+	'Displaying form
+	GUI.FormWO..Show
+
+F.Intrinsic.Control.Catch
+	
+	F.Intrinsic.Control.CallSub(CatchError)
+	
+F.Intrinsic.Control.EndTry
+Program.Sub.Main.End
+
+Program.Sub.OpenFileDialog.Start
+'This subroutine presents the user with a dialog form to select the file they want to process
+
+F.Intrinsic.Control.Try
+
+	V.Local.sFilePath.Declare(String)
+	
+	'Hardcoding the custom folder which would be opened with the file dialog. Specifically asked by the customer.
+	'F.Intrinsic.UI.ShowOpenFileDialog("\\HF-APP03\BYSTRONICDATA\BYSOFT\WO PRINT EXPORT\", "", "", V.Local.sFilePath)
+	F.Intrinsic.UI.ShowOpenFileDialog("B:\BySoft7\WO PRINT EXPORT\", "", "", V.Local.sFilePath)
+	F.Intrinsic.Control.If(V.Local.sFilePath.IsNotCancel)
+		
+		'Processing file
+		F.Intrinsic.Control.CallSub("ProcessFile", "FilePath", V.Local.sFilePath)
+		
+	F.Intrinsic.Control.Else
+		
+		'Displaying error message
+		F.Intrinsic.UI.Msgbox("A file must be selected to process. Ending program.", "ERROR")
+		F.Intrinsic.Control.CallSub("FormWO_UnLoad")
+		
+	F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.Catch
+
+	F.Intrinsic.Control.CallSub(CatchError)
+	
+F.Intrinsic.Control.EndTry
+Program.Sub.OpenFileDialog.End
+
+Program.Sub.ProcessFile.Start
+'This subroutine reads the excel spreadsheet and add all necessary columns.
+
+F.Intrinsic.Control.Try
+
+	V.Local.sExcelString.Declare(String)
+	
+	'Reading the spreadsheet and creating dt from it
+	F.Automation.MSExcel.ReadSpreadsheet(V.Args.FilePath,"","", V.Local.sExcelString)
+
+	'Getting rid of a hidden sheet that their automated program creates
+	F.Intrinsic.String.Split(V.Local.sExcelString, "&^&", V.Local.sExcelString)
+	V.Local.sExcelString.RedimPreserve(0,0)
+	
+	'Getting rid of the line in which the excel headers are stored
+	F.Intrinsic.String.Split(V.Local.sExcelString, "$!$", V.Local.sExcelString)
+	F.Intrinsic.Variable.PopArray(V.Local.sExcelString, V.Local.sExcelString)
+	F.Intrinsic.String.Join(V.Local.sExcelString, "$!$", V.Local.sExcelString)
+	
+	F.Data.DataTable.CreateFromString("dtWO", V.Local.sExcelString, "STATUS*!*ORDER_NO*!*DESIGNATION*!*START_DATE2*!*END_DATE2*!*INFO*!*CUSTOMER*!*CUSTOMER_ID*!*CUTTING_PROGRESS", "String*!*String*!*String*!*String*!*String*!*String*!*String*!*String*!*String", "*!*", "$!$", True)
+	
+	'Creating new columns to store job, suffix and js
+	F.Data.DataTable.AddExpressionColumn("dtWO","JOB","String","SUBSTRING(ORDER_NO, 1, 6)")
+	F.Data.DataTable.AddExpressionColumn("dtWO","SUFFIX","String","SUBSTRING(ORDER_NO, 8, 3)")
+	F.Data.DataTable.AddExpressionColumn("dtWO","JS","String","JOB+SUFFIX")
+	
+	'Creating new columns to change their data type from string to date
+	F.Data.DataTable.AddExpressionColumn("dtWO", "START_DATE", "Date", "START_DATE2")
+	F.Data.DataTable.AddExpressionColumn("dtWO", "END_DATE", "Date", "END_DATE2")
+	
+	'Creating a dictionary to verify whether a WO has already been printed
+	F.ODBC.Connection!Con.OpenCompanyConnection
+	F.Data.Dictionary.CreateFromSQL("dictPrintedWO", "Con", "select RTRIM(JOB) + RTRIM(SUFFIX) JS, IF(FLAG_WO_PRTD = 'Y', 'True', 'False') from V_JOB_HEADER ;")
+	F.Data.Dictionary.SetDefaultReturn("dictPrintedWO", "False")
+	F.Data.DataTable.AddColumn("dtWO", "PRINTED", "Boolean", False)
+	F.Data.DataTable.FillFromDictionary("dtWO", "dictPrintedWO", "JS", "PRINTED")
+	F.Data.Dictionary.Close("dictPrintedWO")
+	F.ODBC.Connection!Con.Close
+	
+	'Adding two columns to be later used by the user
+	F.Data.DataTable.AddColumn("dtWO", "PRINT_DOCS", "Boolean", "True")
+	F.Data.DataTable.AddColumn("dtWO", "SELECT", "Boolean", "False")
+
+F.Intrinsic.Control.Catch
+	
+	F.Intrinsic.Control.CallSub(CatchError)
+	
+F.Intrinsic.Control.EndTry
+Program.Sub.ProcessFile.End
+
+Program.Sub.LoadGrid.Start
+'This subroutine formats the grid
+
+F.Intrinsic.Control.Try
+
+	GUI.FormWO.gsgcWO.AddGridviewFromDatatable("gvWO", "dtWO")
+	
+	''General Gridview properties
+	GUI.FormWO.gsgcWO.SetGridviewProperty("gvWO", V.Enum.GridViewPropertyNames!EnableAppearanceOddRow, True)
+	GUI.FormWO.gsgcWO.SetGridviewProperty("gvWO", V.Enum.GridViewPropertyNames!RowAutoHeight, True)
+	GUI.FormWO.gsgcWO.SetGridviewProperty("gvWO", V.Enum.GridViewPropertyNames!ColumnPanelRowHeight, 45)
+	GUI.FormWO.gsgcWO.SetGridviewProperty("gvWO", V.Enum.GridViewPropertyNames!EnableAppearanceFocusedRow, True) 
+	GUI.FormWO.gsgcWO.SetGridviewProperty("gvWO", V.Enum.GridViewPropertyNames!ShowAutoFilterRow, True) 
+	GUI.FormWO.gsgcWO.SetGridviewProperty("gvWO", "OptionsViewColumnAutoWidth", False) 'It allows the user to adjust the column widths
+	
+	''Column properties
+	'WO column fixed
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "SELECT", V.Enum.ColumnPropertyNames!Fixed, "Left")
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "PRINT_DOCS", V.Enum.ColumnPropertyNames!Fixed, "Left")
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "PRINTED", V.Enum.ColumnPropertyNames!Fixed, "Left")
+		
+	'Invisible columns
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "START_DATE2", V.Enum.ColumnPropertyNames!Visible, False)
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "END_DATE2", V.Enum.ColumnPropertyNames!Visible, False)
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "JOB", V.Enum.ColumnPropertyNames!Visible, False)
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "SUFFIX", V.Enum.ColumnPropertyNames!Visible, False)
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "JS", V.Enum.ColumnPropertyNames!Visible, False)
+	
+	'Formatting captions
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "SELECT", V.Enum.ColumnPropertyNames!Caption, "Select")
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "PRINT_DOCS", V.Enum.ColumnPropertyNames!Caption, "Print Docs")
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "PRINTED", V.Enum.ColumnPropertyNames!Caption, "Printed")
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "STATUS", V.Enum.ColumnPropertyNames!Caption, "Status")
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "ORDER_NO", V.Enum.ColumnPropertyNames!Caption, "WO Number")
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "DESIGNATION", V.Enum.ColumnPropertyNames!Caption, "Designation")
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "START_DATE", V.Enum.ColumnPropertyNames!Caption, "Start Date")
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "END_DATE", V.Enum.ColumnPropertyNames!Caption, "End Date")
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "INFO", V.Enum.ColumnPropertyNames!Caption, "Info")
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "CUSTOMER", V.Enum.ColumnPropertyNames!Caption, "Customer")
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "CUSTOMER_ID", V.Enum.ColumnPropertyNames!Caption, "Customer ID")
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "CUTTING_PROGRESS", V.Enum.ColumnPropertyNames!Caption, "Cutting Progress")
+	
+	'Formatting headers
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "SELECT", V.Enum.ColumnPropertyNames!HeaderFontBold, True)
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "PRINT_DOCS", V.Enum.ColumnPropertyNames!HeaderFontBold, True)
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "PRINTED", V.Enum.ColumnPropertyNames!HeaderFontBold, True)
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "STATUS", V.Enum.ColumnPropertyNames!HeaderFontBold, True)
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "ORDER_NO", V.Enum.ColumnPropertyNames!HeaderFontBold, True)
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "DESIGNATION", V.Enum.ColumnPropertyNames!HeaderFontBold, True)
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "START_DATE", V.Enum.ColumnPropertyNames!HeaderFontBold, True)
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "END_DATE", V.Enum.ColumnPropertyNames!HeaderFontBold, True)
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "INFO", V.Enum.ColumnPropertyNames!HeaderFontBold, True)
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "CUSTOMER", V.Enum.ColumnPropertyNames!HeaderFontBold, True)
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "CUSTOMER_ID", V.Enum.ColumnPropertyNames!HeaderFontBold, True)
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "CUTTING_PROGRESS", V.Enum.ColumnPropertyNames!HeaderFontBold, True)
+	
+	'Formatting headers allignment
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "SELECT", V.Enum.ColumnPropertyNames!HeaderHAlignment, "Center")
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "PRINT_DOCS", V.Enum.ColumnPropertyNames!HeaderHAlignment, "Center")
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "PRINTED", V.Enum.ColumnPropertyNames!HeaderHAlignment, "Center")
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "STATUS", V.Enum.ColumnPropertyNames!HeaderHAlignment, "Center")
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "ORDER_NO", V.Enum.ColumnPropertyNames!HeaderHAlignment, "Center")
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "DESIGNATION", V.Enum.ColumnPropertyNames!HeaderHAlignment, "Center")
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "START_DATE", V.Enum.ColumnPropertyNames!HeaderHAlignment, "Center")
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "END_DATE", V.Enum.ColumnPropertyNames!HeaderHAlignment, "Center")
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "INFO", V.Enum.ColumnPropertyNames!HeaderHAlignment, "Center")
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "CUSTOMER", V.Enum.ColumnPropertyNames!HeaderHAlignment, "Center")
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "CUSTOMER_ID", V.Enum.ColumnPropertyNames!HeaderHAlignment, "Center")
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "CUTTING_PROGRESS", V.Enum.ColumnPropertyNames!HeaderHAlignment, "Center")
+	
+	'Formatting widths
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "SELECT", V.Enum.ColumnPropertyNames!MaxWidth, 80)
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "PRINT_DOCS", V.Enum.ColumnPropertyNames!MaxWidth, 100)
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "PRINTED", V.Enum.ColumnPropertyNames!MaxWidth, 80)
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "STATUS", V.Enum.ColumnPropertyNames!MaxWidth, 80)
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "ORDER_NO", V.Enum.ColumnPropertyNames!MinWidth, 150)
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "DESIGNATION", V.Enum.ColumnPropertyNames!MinWidth, 150)
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "START_DATE", V.Enum.ColumnPropertyNames!MaxWidth, 120)
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "END_DATE", V.Enum.ColumnPropertyNames!MaxWidth, 120)
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "INFO", V.Enum.ColumnPropertyNames!MinWidth, 250)
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "CUSTOMER", V.Enum.ColumnPropertyNames!MinWidth, 250)
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "CUSTOMER_ID", V.Enum.ColumnPropertyNames!MinWidth, 100)
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "CUTTING_PROGRESS", V.Enum.ColumnPropertyNames!MinWidth, 150)
+	
+	'Setting visible indexes
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "STATUS", V.Enum.ColumnPropertyNames!VisibleIndex, "1")
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "ORDER_NO", V.Enum.ColumnPropertyNames!VisibleIndex, "2")
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "DESIGNATION", V.Enum.ColumnPropertyNames!VisibleIndex, "3")
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "START_DATE", V.Enum.ColumnPropertyNames!VisibleIndex, "4")
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "END_DATE", V.Enum.ColumnPropertyNames!VisibleIndex, "5")
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "INFO", V.Enum.ColumnPropertyNames!VisibleIndex, "6")
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "CUSTOMER", V.Enum.ColumnPropertyNames!VisibleIndex, "7")
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "CUSTOMER_ID", V.Enum.ColumnPropertyNames!VisibleIndex, "8")
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "CUTTING_PROGRESS", V.Enum.ColumnPropertyNames!VisibleIndex, "9")
+	
+	'Enable SELECT column to be checked/unchecked
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "SELECT", V.Enum.ColumnPropertyNames!AllowEdit, True)
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "SELECT", V.Enum.ColumnPropertyNames!ReadOnly, False)
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "PRINT_DOCS", V.Enum.ColumnPropertyNames!AllowEdit, True)
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "PRINT_DOCS", V.Enum.ColumnPropertyNames!ReadOnly, False)
+	
+	'Formatting date columns to show only date
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "START_DATE", V.Enum.ColumnPropertyNames!DisplayCustomDateTime, "d")
+	GUI.FormWO.gsgcWO.SetColumnProperty("gvWO", "END_DATE", V.Enum.ColumnPropertyNames!DisplayCustomDateTime, "d")
+	
+	'Displaying gv
+	GUI.FormWO.gsgcWO.MainView("gvWO")
+	GUI.FormWO.gsgcWO.Visible(True)
+
+F.Intrinsic.Control.Catch
+	
+	F.Intrinsic.Control.CallSub(CatchError)
+	
+F.Intrinsic.Control.EndTry
+Program.Sub.LoadGrid.End
+
+Program.Sub.SetContextMenus.Start
+'This subroutine sets the grid context menus 
+
+F.Intrinsic.Control.Try
+
+	GUI.FormWO..ContextMenuCreate("ctxgsgcWO")
+	GUI.FormWO.gsgcWO.ContextMenuAttach("ctxgsgcWO")
+	GUI.FormWO..ContextMenuAddItem("ctxgsgcWO","SelectAll",0,"Select All")
+	GUI.FormWO..ContextMenuAddItem("ctxgsgcWO","UnselectAll",0,"Unselect All")
+	
+	GUI.FormWO..ContextMenuSetItemEventHandler("ctxgsgcWO","SelectAll","MenuClickSA")
+	GUI.FormWO..ContextMenuSetItemEventHandler("ctxgsgcWO","UnselectAll","MenuClickSA")
+
+F.Intrinsic.Control.Catch
+	
+	F.Intrinsic.Control.CallSub(CatchError)
+	
+F.Intrinsic.Control.EndTry
+Program.Sub.SetContextMenus.End
+
+Program.Sub.MenuClickSA.Start
+'This subroutine allows the user to select/unselect all gridview records
+
+F.Intrinsic.Control.Try
+
+	V.Local.sReturn.Declare(String)
+	
+	GUI.FormWO.gsgcWO.FilterToWhereClause("gvWO", V.Local.sReturn)
+	F.Data.DataView.Create("dtWO", "dvWO", 22, V.Local.sReturn,"")
+	
+	F.Intrinsic.Control.If(V.Args.ItemName,=,"SELECTALL")
+	
+		F.Data.DataView.SetValue("dtWO", "dvWO",-1,"SELECT",True)
+		
+	F.Intrinsic.Control.ElseIf(V.Args.ItemName,=,"UNSELECTALL")
+	
+		F.Data.DataView.SetValue("dtWO", "dvWO",-1,"SELECT",False)
+		
+	F.Intrinsic.Control.EndIf
+	F.Data.DataView.Close("dtWO", "dvWO")
+
+F.Intrinsic.Control.Catch
+	
+	F.Intrinsic.Control.CallSub(CatchError)
+	
+F.Intrinsic.Control.EndTry
+Program.Sub.MenuClickSA.End
+
+Program.Sub.FormWO_UnLoad.Start
+'Closing the connection if it is open
+f.Intrinsic.Control.If(v.ODBC.con.exists,=,"1") 	
+    f.ODBC.Connection!Con.Close
+f.Intrinsic.Control.EndIf
+
+'Closing screen whenever the email form is closed out
+GUI.FormWO..Visible(False)
+
+'Ending program
+F.Intrinsic.Control.End
+Program.Sub.FormWO_UnLoad.End
+
+Program.Sub.cmd1_Click.Start
+'This subrotuine prints the WO and its associated documents
+
+F.Intrinsic.Control.Try
+
+	v.Local.iCounter.Declare(Long)
+	V.Local.sJob.Declare(String)
+	V.Local.sSuffix.Declare(String)
+	V.Local.sSQL.Declare(String)
+	v.Local.iLinkID.Declare(Long)
+	v.Local.iCounter2.Declare(Long)
+	V.Local.sFilePath.Declare(String)
+	V.Local.sPart.Declare(String)
+	V.Local.sGroupIDs.Declare(String)
+	V.Local.sCallParam.Declare(String)
+	V.Local.sParams.Declare(String)
+	V.Local.sParamValues.Declare(String)
+	V.Local.bMatl.Declare(Boolean)
+	V.Local.bOut.Declare(Boolean)
+	V.Local.bComment.Declare(Boolean)
+	V.Local.sMachines.Declare(String)
+	V.Local.sMessage.Declare(String)
+	
+	F.Intrinsic.Control.If(V.Screen.FormWO!chkDocsOnly.Value,=,1)
+	
+		'Printing just the associated documents to the WOs, not the WOs.
+		F.Intrinsic.Control.CallSub("PrintDocsOnly")
+		
+	F.Intrinsic.Control.Else
+		
+		'Printing WOs and their associated documents
+		'Getting options required to print report
+		F.Global.General.ReadOption("400725",0,False,V.Local.bMatl)
+		F.Global.General.ReadOption("400727",0,False,V.Local.bOut)
+		F.Global.General.ReadOption("400151",0,False,V.Local.bComment)
+
+		'Getting all WCs stored in ATG_3793_NOPRINT_WCS, those WCs should not be printing in WO report.
+		F.ODBC.Connection!Con.OpenCompanyConnection
+		F.Data.DataTable.CreateFromSQL("dtNoPrintWCs", "Con", "select WC_ID, RTRIM(WC_NAME) WC_NAME, RTRIM(WG) WG, RTRIM(DESCRIPTION) DESCRIPTION, FULL_WG_INCL from ATG_3793_NOPRINT_WCS;", True)
+		
+		'Creating dictionary to get all machines ID
+		F.Data.Dictionary.CreateFromSQL("dictWC", "Con", "select RTRIM(WC_NAME) WC_NAME, RTRIM(MACHINE) MACHINE from V_WORKCENTERS;")
+		F.Data.Dictionary.SetDefaultReturn("dictWC", "")
+		F.Data.DataTable.AddColumn("dtNoPrintWCs", "MACHINE_NAME", "String")
+		F.Data.DataTable.FillFromDictionary("dtNoPrintWCs", "dictWC", "WC_NAME", "MACHINE_NAME")
+		F.Data.Dictionary.Close("dictWC")
+		
+		'Storing all machines in a variable
+		f.Data.DataTable.ColumnToString("dtNoPrintWCs", "MACHINE_NAME", V.Local.sMachines)
+		F.Intrinsic.String.Replace(V.Local.sMachines, "*!*", "','", V.Local.sMachines)
+		
+		'Getting all doc control groups whose documents must be printed
+		'Took the lines out of the for loop since this just needs to be executed once.
+		F.ODBC.Connection!Con.ExecuteAndReturn("select GRP_ID FROM ATG_PRINT_DOC_GRP where TYPE = 1 and PRINT_FLAG = 1;", V.Local.sGroupIDs)
+		f.Intrinsic.String.Replace(V.Local.sGroupIDs, "#$#", "','", V.Local.sGroupIDs)
+		
+		'Creating dv to print only the selected records
+		F.Data.DataView.Create("dtWO", "dvWO", 22,"[SELECT] = 'True'", "")	
+		
+		'Looping through dv to print the WO and its associated documents if stated
+		F.Intrinsic.Control.For(V.Local.iCounter, 0, V.DataView.dtWO!dvWO.RowCount--, 1) 
+			
+			V.Local.sJob.Set(V.DataView.dtWO!dvWO(V.Local.iCounter).JOB!FieldValTrim)
+			V.Local.sSuffix.Set(V.DataView.dtWO!dvWO(V.Local.iCounter).SUFFIX!FieldValTrim)
+			
+			'Validating if selected WO exists
+			F.Intrinsic.String.Build("select JOB from V_JOB_HEADER where JOB = '{0}' and SUFFIX = '{1}';", V.Local.sJob, V.Local.sSuffix, V.Local.sSQL)
+			F.ODBC.Connection!Con.ExecuteAndReturn(V.Local.sSQL,V.Local.sSQL)
+			
+			'If WO exists, then continue with process.
+			F.Intrinsic.Control.If(V.Ambient.ExecuteAndReturnEOF, =, False)
+			
+				'900100 Print barcode work order extended: Work order number, work order suffix, report ID
+				F.Intrinsic.String.Build("{0}!*!{1}!*!001811",V.Local.sJob,V.Local.sSuffix,V.Local.sCallParam)
+				
+				'SyncBIO will run the callwrapper screenless, suppress the report, and generate BI data so that the script can manipulate the data before printing the report.
+				F.Global.General.CallWrapperSyncBIO(900100,V.Local.sCallParam)
+				
+				'Calling sub to get rid of WCs that should not be printed
+				F.Intrinsic.Control.CallSub("DeleteSeqs", "Job", V.Local.sJob, "Suffix", V.Local.sSuffix, "Machines", V.Local.sMachines)
+				
+				'Printing report
+				F.Intrinsic.String.Build("{0}!*!{1}!*!{2}!*!False!*!BJ020LZ!*!001811!*!{3}",V.Caller.Terminal,V.Local.bMatl,V.Local.bOut,V.Local.bComment,V.Local.sParamValues)
+				F.Intrinsic.String.Split(V.Local.sParamValues,"!*!",V.Local.sParamValues)
+				F.Intrinsic.String.Split("Terminal*!*MATLBAR*!*OUTBAR*!*FGBAR*!*PROGRAM*!*REPORTID*!*COMMENTS","*!*",V.Local.sParams)
+		
+				'This report will run Ascynchronously
+				'PrintReport(ReportId, Mode, ParamNames, ParamValues, PrinterName, Synchronous)
+				'Printer Name: It's the name that shows up in "Printers and Faxes". If you don't pass a printer name it will try to use the user's default printer in there.
+				F.Global.BI.PrintReport("001811",8,V.Local.sParams,V.Local.sParamValues, "", True)
+				
+				'Updating printed flag for the recently printed WO
+				F.Intrinsic.String.Build("update JOB_HEADER set FLAG_WO_PRTD = 'Y' where JOB = '{0}' and SUFFIX = '{1}';", V.Local.sJob, V.Local.sSuffix, V.Local.sSQL)
+				F.ODBC.Connection!Con.Execute(V.Local.sSQL)
+				
+				'Validating whether associated documents must be printed
+				F.Intrinsic.Control.If(V.DataView.dtWO!dvWO(V.Local.iCounter).PRINT_DOCS!FieldVal, =, True)
+			
+					'Getting part linked to the WO. Since it has been validated that the job and suffix exist, a part number exist too.
+					F.Intrinsic.String.Build("select RTRIM(PART) PART from V_JOB_HEADER where JOB = '{0}' and SUFFIX = '{1}';", V.Local.sJob, V.Local.sSuffix, V.Local.sSQL)
+					F.ODBC.Connection!Con.ExecuteAndReturn(V.Local.sSQL, V.Local.sPart)
+					
+					'Getting the ID linked to the WO's part
+					F.Global.DocumentControl.GetLinkID(V.Local.sPart,30,V.Local.iLinkID)
+					
+					'Closing dt
+					F.Intrinsic.Control.If(V.DataTable.dtDocs.Exists)
+						F.Data.DataTable.Close("dtDocs")
+					F.Intrinsic.Control.EndIf
+
+					'Getting all documents to print and printing them.
+					F.Intrinsic.String.Build("select RTRIM(PATH) PATH, RTRIM(FILE) FILE from ATG_DOC_ASSOC where LINK_ID = '{0}' and GRP_ID in ('{1}');", V.Local.iLinkID, V.Local.sGroupIDs, V.Local.sSQL)
+					F.Data.DataTable.CreateFromSQL("dtDocs", "Con", V.Local.sSQL, True)
+					
+					F.Intrinsic.Control.If(V.DataTable.dtDocs.RowCount, <>, 0)
+					
+						'Looping through dt to automatically open all documents in the user's sreen
+						F.Intrinsic.Control.For(V.Local.iCounter2, 0, V.DataTable.dtDocs.RowCount--, 1) 
+							
+							'Building the file path and executing task
+							F.Intrinsic.String.Build("{0}\{1}", V.DataTable.dtDocs(V.Local.iCounter2).PATH!FieldValTrim, V.DataTable.dtDocs(V.Local.iCounter2).FILE!FieldValTrim, v.Local.sFilePath)
+							F.Intrinsic.Task.ShellExec(V.Caller.Handle,"Print",V.Local.sFilePath,"","",5)
+			
+						F.Intrinsic.Control.Next(V.Local.iCounter2)
+					
+					F.Intrinsic.Control.Else
+					
+						'Logging that this WO docs werent printed since there were no linked documents.
+						F.Intrinsic.String.Build("WO {0}-{1} linked documents were not printed because there are none.", V.Local.sJob, V.Local.sSuffix, V.Local.sMessage)
+						F.Intrinsic.Control.CallSub("Logging", "Message", V.Local.sMessage)
+					
+					F.Intrinsic.Control.EndIf
+						
+				F.Intrinsic.Control.EndIf
+		
+			F.Intrinsic.Control.Else
+			
+				'Logging that this WO docs werent able to print since previous query got no returned results.
+				F.Intrinsic.String.Build("WO {0}-{1} wasnt printed because it doesnt exist in DB.", V.Local.sJob, V.Local.sSuffix, V.Local.sMessage)
+				F.Intrinsic.Control.CallSub("Logging", "Message", V.Local.sMessage)
+					
+			F.Intrinsic.Control.EndIf
+		
+		F.Intrinsic.Control.Next(V.Local.iCounter)
+		F.ODBC.Connection!Con.Close
+	
+	F.Intrinsic.Control.EndIf
+		
+	'Displaying message box to confirm process executed successfully
+	F.Intrinsic.UI.Msgbox("Process executed successfully.", "ARC 6741")
+	F.Intrinsic.Control.CallSub("FormWO_UnLoad")
+	
+F.Intrinsic.Control.Catch
+	
+	F.Intrinsic.Control.CallSub(CatchError)
+	
+F.Intrinsic.Control.EndTry
+
+Program.Sub.cmd1_Click.End
+
+Program.Sub.CatchError.Start
+'To display the error
+F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}", V.Ambient.ScriptPath, V.Ambient.Newline, V.Ambient.SubroutineCalledFrom, V.Ambient.ErrorNumber, V.Ambient.ErrorDescription, V.Ambient.GABVersion, V.Global.sError) 
+F.Intrinsic.UI.Msgbox(V.Global.sError)
+F.Intrinsic.Control.CallSub("FormWO_UnLoad")
+Program.Sub.CatchError.End
+
+Program.Sub.DeleteSeqs.Start
+'This subroutine gets rid of all the not to be printed WCs in the BI tables, so the report gets printed without those labor seqs.
+
+F.Intrinsic.Control.Try
+
+	V.Local.sSQL.Declare(String)
+	V.Local.sMachines.Declare(String)
+	
+	V.Local.sMachines.Set(V.Args.Machines)
+	
+	'Validating if selected WO data was populated in BI_BAR_HEAD
+	F.Intrinsic.String.Build("select * from BI_BAR_HEAD where TERMINAL = '{0}' and JOB = '{1}' and SUFFIX = '{2}';", V.Caller.Terminal, V.Args.Job, V.Args.Suffix, V.Local.sSQL)
+	F.ODBC.Connection!Con.ExecuteAndReturn(V.Local.sSQL,V.Local.sSQL)
+	
+	'If WO data was populated, then continue with process.
+	F.Intrinsic.Control.If(V.Ambient.ExecuteAndReturnEOF, =, False)
+			
+		'Deleting all the WO seqs that have a not to be printed WC
+		F.Intrinsic.String.Build("delete from BI_BAR_DETAIL where TERMINAL = '{0}' and JOB = '{1}' and SUFFIX = '{2}' and MACH in ('{3}') and LMO = 'L';", V.Caller.Terminal, V.Args.Job, V.Args.Suffix, V.Args.Machines, V.Local.sSQL)
+		F.ODBC.Connection!Con.Execute(V.Local.sSQL)
+				
+	F.Intrinsic.Control.Else
+	
+		'Logging that this WO docs werent able to print since previous query got no returned results.
+		F.Intrinsic.String.Build("WO {0}-{1} wasnt printed because data didnt populate in BI table.", V.Args.Job, V.Args.Suffix, V.Local.sMessage)
+		F.Intrinsic.Control.CallSub("Logging", "Message", V.Local.sMessage)	
+	
+	F.Intrinsic.Control.EndIf
+	
+F.Intrinsic.Control.Catch
+	
+	F.Intrinsic.Control.CallSub(CatchError)
+	
+F.Intrinsic.Control.EndTry
+Program.Sub.DeleteSeqs.End
+
+Program.Sub.Logging.Start
+F.Intrinsic.Control.Try
+
+	V.Local.sPath.Declare(String)
+	V.Local.sFile.Declare(String)
+	V.Local.bExists.Declare(Boolean)
+	V.Local.bExists2.Declare(Boolean)
+	V.Local.sMessage.Declare(String)
+	V.Local.sContents.Declare(String)
+	
+	V.Local.sMessage.Set(V.Args.Message)
+	
+	'Checking if log folder exists
+	F.Intrinsic.String.Build("{0}\CUSTOM\6741\LOG", V.Caller.GlobalDir, V.Local.sPath)
+	F.Intrinsic.File.DirExists(V.Local.sPath, V.Local.bExists)
+	F.Intrinsic.Control.If(V.Local.bExists.Not)
+		
+		F.Intrinsic.File.CreateDir(V.Local.sPath)
+	
+	F.Intrinsic.Control.EndIf
+	
+	'Checking if log file exists
+	F.Intrinsic.String.Build("{0}\6741 Log.txt", V.Local.sPath, V.Local.sFile)
+	
+	F.Intrinsic.File.Exists(V.Local.sFile, V.Local.bExists2)
+	F.Intrinsic.Control.If(V.Local.bExists2.Not)
+		
+		F.Intrinsic.String.Build("{0} {1}: Log Start", V.Ambient.Date.FormatYYYY-MM-DD, V.Ambient.Time.Format!HH:NN:SS, V.Local.sContents)
+		F.Intrinsic.File.String2File(V.Local.sFile, V.Local.sContents)
+		
+	F.Intrinsic.Control.EndIf
+	
+	F.Intrinsic.String.Build("{0} {1}: {2}", V.Ambient.Date.FormatYYYY-MM-DD, V.Ambient.Time.Format!HH:NN:SS, V.Local.sMessage, V.Local.sContents)
+	F.Intrinsic.File.Append2FileNewLine(V.Local.sFile, V.Local.sContents)
+	
+F.Intrinsic.Control.Catch
+
+	F.Intrinsic.Control.CallSub(CatchError)
+	
+F.Intrinsic.Control.EndTry
+Program.Sub.Logging.End
+
+Program.Sub.PrintDocsOnly.Start
+'This subrotuine prints only the selected WO associated documents
+
+F.Intrinsic.Control.Try
+
+	v.Local.iCounter.Declare(Long)
+	V.Local.sJob.Declare(String)
+	V.Local.sSuffix.Declare(String)
+	V.Local.sSQL.Declare(String)
+	V.Local.sPart.Declare(String)
+	v.Local.iLinkID.Declare(Long)
+	V.Local.sGroupIDs.Declare(String)
+	v.Local.iCounter2.Declare(Long)
+	V.Local.sFilePath.Declare(String)
+	V.Local.sMessage.Declare(String)
+	
+	'Getting all doc control groups whose documents must be printed
+	'Took the lines out of the for loop since this just needs to be executed once.
+	F.ODBC.Connection!Con.OpenCompanyConnection
+	F.ODBC.Connection!Con.ExecuteAndReturn("select GRP_ID FROM ATG_PRINT_DOC_GRP WHERE TYPE = 1 and PRINT_FLAG = 1;", V.Local.sGroupIDs)
+	f.Intrinsic.String.Replace(V.Local.sGroupIDs, "#$#", "','", V.Local.sGroupIDs)
+	
+	'Creating dv to print only the selected records
+	F.Data.DataView.Create("dtWO", "dvWO", 22,"[SELECT] = 'True'", "")	
+	
+	'Looping through dv to print the WO associated documents
+	F.Intrinsic.Control.For(V.Local.iCounter, 0, V.DataView.dtWO!dvWO.RowCount--, 1) 
+	
+		V.Local.sJob.Set(V.DataView.dtWO!dvWO(V.Local.iCounter).JOB!FieldValTrim)
+		V.Local.sSuffix.Set(V.DataView.dtWO!dvWO(V.Local.iCounter).SUFFIX!FieldValTrim)
+				
+		'Validating job suffix exists and getting part linked to the WO 
+		F.Intrinsic.String.Build("select RTRIM(PART) PART from V_JOB_HEADER where JOB = '{0}' and SUFFIX = '{1}';", V.Local.sJob, V.Local.sSuffix, V.Local.sSQL)
+		F.ODBC.Connection!Con.ExecuteAndReturn(V.Local.sSQL, V.Local.sPart)
+		
+		'If part exists, then continue with process.
+		F.Intrinsic.Control.If(V.Ambient.ExecuteAndReturnEOF, =, False)
+			
+			'Getting the ID linked to the WO's part
+			F.Global.DocumentControl.GetLinkID(V.Local.sPart,30,V.Local.iLinkID)
+		
+			'Closing dt
+			F.Intrinsic.Control.If(V.DataTable.dtDocs.Exists)
+				F.Data.DataTable.Close("dtDocs")
+			F.Intrinsic.Control.EndIf
+					
+			'Getting all documents to print and printing them.
+			F.Intrinsic.String.Build("select RTRIM(PATH) PATH, RTRIM(FILE) FILE from ATG_DOC_ASSOC where LINK_ID = '{0}' and GRP_ID in ('{1}');", V.Local.iLinkID, V.Local.sGroupIDs, V.Local.sSQL)
+			F.Data.DataTable.CreateFromSQL("dtDocs", "Con", V.Local.sSQL, True)
+			
+			F.Intrinsic.Control.If(V.DataTable.dtDocs.RowCount, <>, 0)
+			
+				'Looping through dt to print docs
+				F.Intrinsic.Control.For(V.Local.iCounter2, 0, V.DataTable.dtDocs.RowCount--, 1) 
+					
+					'Building the file path and executing task
+					F.Intrinsic.String.Build("{0}\{1}", V.DataTable.dtDocs(V.Local.iCounter2).PATH!FieldValTrim, V.DataTable.dtDocs(V.Local.iCounter2).FILE!FieldValTrim, v.Local.sFilePath)
+					F.Intrinsic.Task.ShellExec(V.Caller.Handle,"Print",V.Local.sFilePath,"","",5)
+		
+				F.Intrinsic.Control.Next(V.Local.iCounter2)
+			
+			F.Intrinsic.Control.Else
+			
+				'Logging that this WO docs werent printed since there were no linked documents.
+				F.Intrinsic.String.Build("WO {0}-{1} linked documents were not printed because there are none.", V.Local.sJob, V.Local.sSuffix, V.Local.sMessage)
+				F.Intrinsic.Control.CallSub("Logging", "Message", V.Local.sMessage)
+						
+			F.Intrinsic.Control.EndIf
+			
+		F.Intrinsic.Control.Else
+			
+			'Logging that this WO docs werent able to print since previous query got no returned results.
+			F.Intrinsic.String.Build("WO {0}-{1} didnt print its associated documents, no part linked to WO.", V.Local.sJob, V.Local.sSuffix, V.Local.sMessage)
+			F.Intrinsic.Control.CallSub("Logging", "Message", V.Local.sMessage)
+			
+		F.Intrinsic.Control.EndIf
+			
+	F.Intrinsic.Control.Next(V.Local.iCounter)
+	F.ODBC.Connection!Con.Close
+
+F.Intrinsic.Control.Catch
+	
+	F.Intrinsic.Control.CallSub(CatchError)
+	
+F.Intrinsic.Control.EndTry
+Program.Sub.PrintDocsOnly.End
+
+Program.Sub.Comments.Start
+${$5$}$3.0.0.0$}$1
+${$6$}$apadilla$}$20220607133350363$}$Lag9STqBJOmNXSbd5+msRcBWPGz0aFqSzPePUG9qWbzCorgNsQBlADkEIlru4R3J1X2bRnrfbCAi1tIO7EKOSQ==
+Program.Sub.Comments.End
